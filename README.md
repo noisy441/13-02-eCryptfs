@@ -233,6 +233,6 @@ sudo mv /usr/bin/man1 /usr/bin/man
 man ls
 ```
 
-![apparmor](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img9.png)
+![apparmor](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img10.png)
 
 Подводя итоги, мы с помощью AppArmor успешно предотвратили несанкционированное использование сетевых возможностей программой, которая не должна иметь к ним доступ, даже когда исполняемый файл был подменен. 
