@@ -28,6 +28,65 @@
 
 ### Решение 1
 
+Устанавливаем eCryptfs с помощью команды:
+
+```
+sudo apt update
+sudo apt install ecryptfs-utils
+```
+
+Далее добавим в систему пользователя cryptouser.
+Выполним команду: 
+``` 
+sudo useradd -m -d /home/cryptouser -s /bin/bash cryptouser 
+```
+Этой командой создадим пользователя и сразу создадим для него домашний каталог и определим оболочку.
+Зададим пользователю пароль "123" выполнив команду:
+```
+sudo passwd cryptouser
+```
+
+Теперь когда eCryptfs и пользователь cryptouser у нас имеются, можем приступить к третьему этапу, шифрованию домашнего каталога.
+Выполним для начала:
+```
+sudo modprobe ecryptfs
+```
+Эта команда выполняет загрузку модуля ядра Linux, который обеспечивает поддержку файловой системы eCryptfs.
+Далее выполним:
+```
+sudo ecryptfs-migrate-home -u cryptouser
+```
+Эта команда начнет миграцию домашнего каталога в зашифрованное хранилище и обеспечит его автоматическое монтирование при входе в систему. Пользователь сможет работать с файлами как будто ничего не произошло. На деле же все его данные будут зашифрованы.
+
+![ecryptfs](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img1.png)
+
+Для завершения копирования нам необходимо проверить что пользователь cryptouser имеет доступ к своим файлам,а потом удалить резервную копию данных из /home/cryptouser.PmBolooA.
+
+![ecryptfs](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img2.png)
+
+Зайдем под пользователем cryptouser для чего выполним
+
+```
+su cryptiuser
+ecryptfs-unwrap-passphrase ~/.ecryptfs/wrapped-passphrase
+exit
+```
+Теперь все данные пользователя cryptouser шифруются, взглянем на домашний каталог авторизованного cryptouser/
+
+![ecryptfs](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img3.png)
+
+Видим стандартные папки и каталоги ```.ecryptfs``` и ```.Private```. ВЫйдем из пользователя cryptouser и выполним 
+
+```
+sudo ls -la /home/cryptouser/
+```
+
+![ecryptfs](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img4.png)
+
+Мы видим уже совершенно другое содержимое домашнего каталога, мы выдим только файлы которые должны видеть в зашифрованном каталоге.
+
+---
+
 ### Задание 2
 
 1. Установите поддержку **LUKS**.
@@ -38,6 +97,61 @@
 
 ### Решение 2
 
+LUKS (от Linux Unified Key Setup) — спецификация формата шифрования дисков, изначально нацеленная на использование в ОС на основе ядра Linux. Первоочередной целью технологии было обеспечить удобный для пользователя стандартизированный способ управления ключами расшифровки. Одной из особенностей формата является поддержка нескольких ключей, используемых наравне друг с другом для доступа к одному зашифрованному носителю, с возможностью их добавления и изъятия по запросу пользователя.
+
+Установим необходимый пакет:
+
+```
+sudo apt install cryptsetup
+```
+
+Создадим раздел 
+
+```
+sudo fdisk /dev/sdb
+```
+![LUKS](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img5-1.png)
+
+Теперь можем приступить к шифрованию созданного раздела.
+
+```
+sudo cryptsetup luksFormat /dev/sdb1
+```
+- Соглашаемся (YES)
+- Придумываем passphrase (Например 123)
+По итогу раздел зашифрован.
+
+![LUKS](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img5.png)
+
+Теперь мы можем открыть зашифрованный раздел, создать на нем файловую систему и смонтировать.
+
+Выполним команды
+
+```
+# Открытие шифрованного разздела
+sudo cryptsetup luksOpen /dev/sdb1 encrypted_volume
+
+# Созданние файловой системы
+sudo mkfs.ext4 /dev/mapper/encrypted_volume
+
+# Монтируем раздел
+sudo mkdir /mnt/encrypted
+sudo mount /dev/mapper/encrypted_volume /mnt/encrypted
+```
+
+![LUKS](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img6.png)
+
+Посмотрим информацию о LUKS разделе
+
+```
+sudo cryptsetup luksDump /dev/sdb1
+```
+
+![LUKS](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img7.png)
+
+Шифрованный раздел готов к использованию. Можно настроить автоматическое монтирование раздела при загрузке. 
+
+---
 
 ## Дополнительные задания (со звёздочкой*)
 
@@ -53,3 +167,72 @@
 *В качестве ответа пришлите снимки экрана с поэтапным выполнением задания.*
 
 ### Решение 3
+
+Установим apparmor следующей командой
+
+```
+sudo apt install apparmor apparmor-utils apparmor-profiles -y
+```
+
+Проверим что статус
+
+```
+sudo systemctl status apparmor
+sudo aa-status
+```
+Видим что apparmor работает и у него есть 180 загруженных модулей
+
+![apparmor](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img8.png)
+
+Теперь приступим к эксперименту из презентации. Смотрим доступные профили AppArmor
+```
+ls /etc/apparmor.d/
+```
+Создаем копию man и подменяем его ping
+
+```
+sudo cp /usr/bin/man /usr/bin/man1
+sudo cp /bin/ping /usr/bin/man
+```
+
+Пытаемся использовать man для ping до включения apparmor
+
+```
+sudo man 127.0.0.1
+```
+
+Пинг работает. Теперь включаем профиль man в apparmor  и повторяем оперцию.
+
+```
+sudo aa-enforce /etc/apparmor.d/usr.bin.man
+sudo man 127.0.0.1
+```
+Получаем отказ Permission denied. 
+
+![apparmor](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img9.png)
+
+AppArmor отрабатывает так как мы и задумали. После того как эксперимент проведен, отключим apparmor и удалим его. Для чего выполним:
+```
+# Отключаем профиль, останавливаем и выключаем автозапуск
+sudo aa-complain /etc/apparmor.d/usr.bin.man
+sudo systemctl stop apparmor
+sudo systemctl disable apparmor
+
+# Полностью удаляем AppArmor
+sudo apt remove apparmor apparmor-utils --purge -y
+sudo apt autoremove -y
+
+```
+
+После всех проделанных процедур, остается только восстановить man. Выполним команду:
+```
+sudo mv /usr/bin/man1 /usr/bin/man
+```
+И проверим, что man работает как надо
+```
+man ls
+```
+
+![apparmor](https://github.com/noisy441/13-02-ecryptfs/blob/main/img/img9.png)
+
+Подводя итоги, мы с помощью AppArmor успешно предотвратили несанкционированное использование сетевых возможностей программой, которая не должна иметь к ним доступ, даже когда исполняемый файл был подменен. 
